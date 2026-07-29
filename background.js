@@ -76,8 +76,8 @@ chrome.webNavigation.onCompleted.addListener(async (details) => {
   const locked = await isDomainLocked(domain);
   if (!locked) return;
   
-  const tabLocked = await isDomainSessionLocked(domain);
-  if (!tabLocked) {
+  const sessionLocked = await isDomainSessionLocked(domain);
+  if (sessionLocked) {
     await injectLockOverlay(details.tabId, domain);
   }
 });
@@ -93,8 +93,8 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   const locked = await isDomainLocked(domain);
   if (!locked) return;
   
-  const tabLocked = await isDomainSessionLocked(domain);
-  if (!tabLocked) {
+  const sessionLocked = await isDomainSessionLocked(domain);
+  if (sessionLocked) {
     await injectLockOverlay(tabId, domain);
   }
 });
