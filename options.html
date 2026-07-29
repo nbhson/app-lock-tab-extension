@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tab Lock - Settings</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #fff;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 40px 20px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+    .header-icon {
+      font-size: 40px;
+    }
+    .header-text h1 {
+      font-size: 28px;
+      font-weight: 600;
+    }
+    .header-text p {
+      font-size: 14px;
+      color: rgba(255,255,255,0.5);
+    }
+    .card {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .card h2 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .domain-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .domain-item:last-child {
+      border-bottom: none;
+    }
+    .domain-name {
+      font-family: monospace;
+      font-size: 14px;
+    }
+    .domain-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 6px 14px;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-danger {
+      background: rgba(231, 76, 60, 0.2);
+      color: #e74c3c;
+      border: 1px solid rgba(231, 76, 60, 0.3);
+    }
+    .btn-danger:hover {
+      background: rgba(231, 76, 60, 0.3);
+    }
+    .btn-secondary {
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+    }
+    .btn-secondary:hover {
+      background: rgba(255,255,255,0.2);
+    }
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: rgba(255,255,255,0.4);
+    }
+    .empty-state .icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+    .empty-state p {
+      font-size: 14px;
+    }
+    .input-group {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .input-group input {
+      flex: 1;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .input-group input:focus {
+      border-color: #e74c3c;
+    }
+    .input-group input::placeholder {
+      color: rgba(255,255,255,0.3);
+    }
+    .message {
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 12px;
+      display: none;
+    }
+    .message.success {
+      display: block;
+      background: rgba(46, 204, 113, 0.15);
+      border: 1px solid rgba(46, 204, 113, 0.3);
+      color: #2ecc71;
+    }
+    .message.error {
+      display: block;
+      background: rgba(231, 76, 60, 0.15);
+      border: 1px solid rgba(231, 76, 60, 0.3);
+      color: #e74c3c;
+    }
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: rgba(255,255,255,0.5);
+      text-decoration: none;
+      font-size: 14px;
+      margin-bottom: 24px;
+      transition: color 0.2s;
+    }
+    .back-link:hover {
+      color: rgba(255,255,255,0.8);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="#" class="back-link" id="back-link">← Back to Popup</a>
+    
+    <div class="header">
+      <div class="header-icon">🔒</div>
+      <div class="header-text">
+        <h1>Tab Lock Settings</h1>
+        <p>Manage all locked domains</p>
+      </div>
+    </div>
+
+    <div id="message" class="message"></div>
+
+    <div class="card">
+      <h2>🔐 Lock a New Domain</h2>
+      <div class="input-group">
+        <input type="text" id="new-domain" placeholder="example.com" />
+        <input type="password" id="new-domain-password" placeholder="Password" />
+      </div>
+      <div class="input-group">
+        <input type="password" id="new-domain-confirm" placeholder="Confirm password" />
+        <button class="btn btn-secondary" id="btn-add-domain" style="padding: 10px 20px;">Add</button>
+      </div>
+    </div>
+
+    <div class="card" id="domains-card">
+      <h2>📋 Locked Domains</h2>
+      <div id="domains-list">
+        <div class="empty-state" id="empty-state">
+          <div class="icon">🔓</div>
+          <p>No domains locked yet. Add one above!</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>
