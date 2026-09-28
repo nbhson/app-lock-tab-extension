@@ -5,205 +5,110 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tab Lock - Settings</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
+    :root {
+      --bg: #0f0f17; --bg-soft: #181822; --card: #1e1e2e; --border: rgba(255,255,255,0.06); --border-strong: rgba(255,255,255,0.10);
+      --text: #f8fafc; --text-2: #94a3b8; --text-3: #64748b;
+      --primary: #ef4444; --success: #22c55e; --warning: #f59e0b;
+      --radius: 14px; --radius-sm: 8px; --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; --mono: ui-monospace, monospace;
+      --ease: cubic-bezier(0.16,1,0.3,1);
     }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #1a1a2e;
-      color: #fff;
-      min-height: 100vh;
-    }
-    .container {
-      max-width: 600px;
-      margin: 0 auto;
-      padding: 40px 20px;
-    }
-    .header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 32px;
-    }
-    .header-icon {
-      font-size: 40px;
-    }
-    .header-text h1 {
-      font-size: 28px;
-      font-weight: 600;
-    }
-    .header-text p {
-      font-size: 14px;
-      color: rgba(255,255,255,0.5);
-    }
-    .card {
-      background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 16px;
-      padding: 20px;
-      margin-bottom: 16px;
-    }
-    .card h2 {
-      font-size: 16px;
-      font-weight: 600;
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .domain-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 12px 0;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
-    }
-    .domain-item:last-child {
-      border-bottom: none;
-    }
-    .domain-name {
-      font-family: monospace;
-      font-size: 14px;
-    }
-    .domain-actions {
-      display: flex;
-      gap: 8px;
-    }
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 4px;
-      padding: 6px 14px;
-      border: none;
-      border-radius: 6px;
-      font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .btn-danger {
-      background: rgba(231, 76, 60, 0.2);
-      color: #e74c3c;
-      border: 1px solid rgba(231, 76, 60, 0.3);
-    }
-    .btn-danger:hover {
-      background: rgba(231, 76, 60, 0.3);
-    }
-    .btn-secondary {
-      background: rgba(255,255,255,0.1);
-      color: #fff;
-    }
-    .btn-secondary:hover {
-      background: rgba(255,255,255,0.2);
-    }
-    .empty-state {
-      text-align: center;
-      padding: 40px 20px;
-      color: rgba(255,255,255,0.4);
-    }
-    .empty-state .icon {
-      font-size: 48px;
-      margin-bottom: 12px;
-    }
-    .empty-state p {
-      font-size: 14px;
-    }
-    .input-group {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 12px;
-    }
-    .input-group input {
-      flex: 1;
-      background: rgba(255,255,255,0.1);
-      border: 1px solid rgba(255,255,255,0.2);
-      border-radius: 8px;
-      padding: 10px 12px;
-      color: #fff;
-      font-size: 14px;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-    .input-group input:focus {
-      border-color: #e74c3c;
-    }
-    .input-group input::placeholder {
-      color: rgba(255,255,255,0.3);
-    }
-    .message {
-      padding: 10px;
-      border-radius: 8px;
-      font-size: 13px;
-      margin-bottom: 12px;
-      display: none;
-    }
-    .message.success {
-      display: block;
-      background: rgba(46, 204, 113, 0.15);
-      border: 1px solid rgba(46, 204, 113, 0.3);
-      color: #2ecc71;
-    }
-    .message.error {
-      display: block;
-      background: rgba(231, 76, 60, 0.15);
-      border: 1px solid rgba(231, 76, 60, 0.3);
-      color: #e74c3c;
-    }
-    .back-link {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      color: rgba(255,255,255,0.5);
-      text-decoration: none;
-      font-size: 14px;
-      margin-bottom: 24px;
-      transition: color 0.2s;
-    }
-    .back-link:hover {
-      color: rgba(255,255,255,0.8);
-    }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:var(--font); background: var(--bg); color: var(--text); min-height:100vh; -webkit-font-smoothing:antialiased;}
+    .container{max-width:640px; margin:0 auto; padding:32px 20px; display:flex; flex-direction:column; gap:18px;}
+    .back-link{display:inline-flex; align-items:center; gap:6px; color:var(--text-2); text-decoration:none; font-size:13px; font-weight:500; width:fit-content; padding:6px 10px; border-radius:999px; border:1px solid transparent; transition:all .2s var(--ease);}
+    .back-link:hover{color:var(--text); background:rgba(255,255,255,0.06); border-color:var(--border);}
+    .header{display:flex; align-items:center; gap:14px; padding:4px 0;}
+    .header-icon{width:48px;height:48px;display:grid;place-items:center; background:linear-gradient(135deg, rgba(239,68,68,0.15), rgba(239,68,68,0.06)); border:1px solid rgba(239,68,68,0.18); border-radius:14px; font-size:24px;}
+    .header-text h1{font-size:24px; font-weight:800; letter-spacing:-0.02em;}
+    .header-text p{font-size:13px; color:var(--text-2); margin-top:2px;}
+    .stats{display:flex; gap:10px;}
+    .stat{flex:1; background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px 14px;}
+    .stat-num{font-size:20px; font-weight:800;}
+    .stat-label{font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-2);}
+    .card{background:var(--card); border:1px solid var(--border); border-radius:16px; padding:18px; display:flex; flex-direction:column; gap:14px;}
+    .card h2{font-size:14px; font-weight:700; display:flex; align-items:center; gap:8px;}
+    .input-group{display:flex; gap:8px; flex-wrap:wrap;}
+    .input-group input{flex:1; min-width:160px; background:rgba(255,255,255,0.05); border:1px solid var(--border); border-radius:10px; padding:10px 12px; color:var(--text); font-size:13px; outline:none; transition:all .2s var(--ease); font-family:inherit;}
+    .input-group input:focus{border-color: rgba(239,68,68,0.35); box-shadow:0 0 0 3px rgba(239,68,68,0.12); background:rgba(255,255,255,0.06);}
+    .input-group input::placeholder{color:rgba(255,255,255,0.28);}
+    .btn{padding:10px 16px; border-radius:10px; border:none; font-size:13px; font-weight:600; cursor:pointer; transition:all .2s var(--ease); display:inline-flex; align-items:center; justify-content:center; gap:6px; font-family:inherit;}
+    .btn-primary{background:linear-gradient(135deg,#ef4444 0%,#dc2626 100%); color:#fff; box-shadow:0 2px 10px rgba(239,68,68,0.25);}
+    .btn-primary:hover{transform:translateY(-1px); box-shadow:0 4px 16px rgba(239,68,68,0.35);}
+    .btn-danger{background:rgba(239,68,68,0.10); color:#fca5a5; border:1px solid rgba(239,68,68,0.18);}
+    .btn-danger:hover{background:rgba(239,68,68,0.16);}
+    .btn-secondary{background:rgba(255,255,255,0.06); color:var(--text); border:1px solid var(--border);}
+    .btn-secondary:hover{background:rgba(255,255,255,0.10);}
+    .search-wrap{position:relative; display:flex; align-items:center;}
+    .search-wrap input{width:100%; padding-left:36px;}
+    .search-icon{position:absolute; left:10px; color:var(--text-3); font-size:14px;}
+    .domain-item{display:flex; align-items:center; justify-content:space-between; padding:14px 0; border-bottom:1px solid rgba(255,255,255,0.04); gap:12px;}
+    .domain-item:last-child{border-bottom:none;}
+    .domain-left{display:flex; align-items:center; gap:10px; min-width:0;}
+    .domain-icon{width:32px;height:32px;display:grid;place-items:center; background:rgba(239,68,68,0.10); border:1px solid rgba(239,68,68,0.16); border-radius:8px; font-size:14px; flex-shrink:0;}
+    .domain-name{font-family:var(--mono); font-size:13px; font-weight:500; word-break:break-all;}
+    .domain-meta{font-size:11px; color:var(--text-3);}
+    .empty-state{text-align:center; padding:36px 16px; color:var(--text-2);}
+    .empty-state .icon{width:56px;height:56px;display:grid;place-items:center; margin:0 auto 12px; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:16px; font-size:24px;}
+    .empty-state h3{font-size:15px; font-weight:700; color:var(--text); margin-bottom:6px;}
+    .empty-state p{font-size:13px; line-height:1.5; max-width:320px; margin:0 auto;}
+    .message{padding:12px 14px; border-radius:10px; font-size:13px; font-weight:500; display:none; align-items:center; gap:8px; animation:slideIn .3s var(--ease);}
+    .message.success{display:flex; background:rgba(34,197,94,0.10); border:1px solid rgba(34,197,94,0.18); color:#86efac;}
+    .message.error{display:flex; background:rgba(239,68,68,0.10); border:1px solid rgba(239,68,68,0.18); color:#fca5a5;}
+    @keyframes slideIn{from{opacity:0; transform:translateY(-6px)}to{opacity:1; transform:translateY(0)}}
+    .footer{text-align:center; font-size:11px; color:var(--text-3); padding:10px;}
+    @media(max-width:480px){ .input-group input{min-width:100%;} .stats{flex-direction:column;} }
   </style>
 </head>
 <body>
   <div class="container">
-    <a href="#" class="back-link" id="back-link">← Back to Popup</a>
-    
+    <a href="#" class="back-link" id="back-link">← Back</a>
     <div class="header">
       <div class="header-icon">🔒</div>
       <div class="header-text">
         <h1>Tab Lock Settings</h1>
-        <p>Manage all locked domains</p>
+        <p>Manage all protected domains & passwords</p>
       </div>
     </div>
 
-    <div id="message" class="message"></div>
+    <div class="stats" id="stats">
+      <div class="stat"><div class="stat-num" id="stat-count">0</div><div class="stat-label">Locked domains</div></div>
+      <div class="stat"><div class="stat-num" style="color:var(--success)">●</div><div class="stat-label">Session-based unlock</div></div>
+    </div>
+
+    <div id="message" class="message" role="alert"></div>
 
     <div class="card">
-      <h2>🔐 Lock a New Domain</h2>
+      <h2>➕ Lock a New Domain</h2>
       <div class="input-group">
-        <input type="text" id="new-domain" placeholder="example.com" />
-        <input type="password" id="new-domain-password" placeholder="Password" />
+        <input type="text" id="new-domain" placeholder="example.com or https://example.com/path" autocomplete="off" spellcheck="false">
+        <input type="password" id="new-domain-password" placeholder="Password (≥4 chars)" autocomplete="new-password">
       </div>
       <div class="input-group">
-        <input type="password" id="new-domain-confirm" placeholder="Confirm password" />
-        <button class="btn btn-secondary" id="btn-add-domain" style="padding: 10px 20px;">Add</button>
+        <input type="password" id="new-domain-confirm" placeholder="Confirm password" autocomplete="new-password">
+        <button class="btn btn-primary" id="btn-add-domain" style="min-width:100px;">Add Lock</button>
+      </div>
+      <p style="font-size:11px; color:var(--text-3);">Tip: You can paste a full URL — domain will be extracted automatically.</p>
+    </div>
+
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+        <h2>📋 Locked Domains</h2>
+        <span id="count-badge" style="font-size:11px; background:rgba(255,255,255,0.06); border:1px solid var(--border); padding:4px 8px; border-radius:999px; font-weight:700;">0</span>
+      </div>
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="search" placeholder="Search domains...">
+      </div>
+      <div id="domains-list"></div>
+      <div class="empty-state" id="empty-state" style="display:none">
+        <div class="icon">🔓</div>
+        <h3>No domains locked yet</h3>
+        <p>Add a domain above to protect it with a password. Each domain is locked per session.</p>
       </div>
     </div>
 
-    <div class="card" id="domains-card">
-      <h2>📋 Locked Domains</h2>
-      <div id="domains-list">
-        <div class="empty-state" id="empty-state">
-          <div class="icon">🔓</div>
-          <p>No domains locked yet. Add one above!</p>
-        </div>
-      </div>
-    </div>
+    <div class="footer">Tab Lock • Passwords are hashed with SHA-256 and stored locally</div>
   </div>
-
   <script src="options.js"></script>
 </body>
 </html>
