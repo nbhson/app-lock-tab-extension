@@ -44,6 +44,7 @@ function showLockOverlay(domain) {
         <button id="tab-lock-unlock-btn">Mở khóa →</button>
       </div>
       <p id="tab-lock-error" style="display:none"></p>
+      <p id="tab-lock-attempts" style="display:none"></p>
       <div id="tab-lock-hint">Nhấn Enter để mở khóa • Mật khẩu được lưu cục bộ</div>
     </div>
   `;
@@ -139,10 +140,14 @@ function showLockOverlay(domain) {
     }
     #tab-lock-unlock-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(239,68,68,0.35); }
     #tab-lock-unlock-btn:active { transform: scale(0.98); }
+    #tab-lock-unlock-btn:disabled, #tab-lock-password:disabled { opacity: 0.45; cursor: not-allowed; }
     #tab-lock-error {
       margin-top: 14px;
       background: rgba(239,68,68,0.10); border: 1px solid rgba(239,68,68,0.18); color: #fca5a5;
       padding: 8px 12px; border-radius: 10px; font-size: 13px;
+    }
+    #tab-lock-attempts {
+      margin-top: 8px; font-size: 12px; color: rgba(255,255,255,0.45); text-align: center;
     }
     #tab-lock-hint { margin-top: 14px; font-size: 11px; color: rgba(255,255,255,0.35); }
   `;
@@ -157,50 +162,67 @@ function showLockOverlay(domain) {
   const input = document.getElementById('tab-lock-password');
   const unlockBtn = document.getElementById('tab-lock-unlock-btn');
   const errorEl = document.getElementById('tab-lock-error');
-  
+  const attemptsEl = document.getElementById('tab-lock-attempts');
+
   if (input) {
     // Auto-focus after a short delay
     setTimeout(() => input.focus(), 100);
-    
+
     // Submit on Enter
     input.addEventListener('keydown', async (e) => {
       if (e.key === 'Enter') {
-        await attemptUnlock(input, errorEl, domain);
+        await attemptUnlock(input, errorEl, attemptsEl);
       }
       e.stopPropagation();
     });
-    
+
     // Also prevent propagation of regular keyboard events to the page
     input.addEventListener('keyup', (e) => e.stopPropagation());
     input.addEventListener('keypress', (e) => e.stopPropagation());
   }
-  
+
   if (unlockBtn) {
     unlockBtn.addEventListener('click', async () => {
-      await attemptUnlock(input, errorEl, domain);
+      await attemptUnlock(input, errorEl, attemptsEl);
     });
   }
 }
 
 // --- Attempt to unlock ---
-async function attemptUnlock(input, errorEl, domain) {
+async function attemptUnlock(input, errorEl, attemptsEl) {
   const password = input.value.trim();
   if (!password) {
     showError(errorEl, 'Please enter a password');
     return;
   }
-  
+  if (input.disabled) return; // locked out
+
   try {
     const response = await chrome.runtime.sendMessage({
       type: 'VERIFY_PASSWORD',
       domain: domain,
       password: password
     });
-    
+
     if (response && response.valid) {
       hideLockOverlay();
+    } else if (response && response.error === 'locked' && response.retryAfter) {
+      // Rate limited — disable input, show countdown
+      showError(errorEl, 'Too many failed attempts');
+      showLockout(attemptsEl, response.retryAfter);
+      input.value = '';
+      input.disabled = true;
+      const btn = document.getElementById('tab-lock-unlock-btn');
+      if (btn) btn.disabled = true;
     } else {
       showError(errorEl, 'Incorrect password');
+      if (attemptsEl) {
+        if (typeof response?.attemptsLeft === 'number') {
+          showAttempts(attemptsEl, response.attemptsLeft);
+        } else {
+          attemptsEl.style.display = 'none';
+        }
+      }
       input.value = '';
       input.focus();
     }
@@ -209,13 +231,41 @@ async function attemptUnlock(input, errorEl, domain) {
   }
 }
 
-// --- Show error message ---
-function showError(el, message) {
+// --- Show error / attempts message ---
+function showError(el, message, duration) {
   if (el) {
     el.textContent = message;
     el.style.display = 'block';
-    setTimeout(() => { el.style.display = 'none'; }, 3000);
+    setTimeout(() => { el.style.display = 'none'; }, duration || 3000);
   }
+}
+
+function showAttempts(el, remaining) {
+  if (el) {
+    el.textContent = remaining > 0 ? `${remaining} attempt${remaining > 1 ? 's' : ''} remaining` : 'No attempts remaining';
+    el.style.display = 'block';
+  }
+}
+
+function showLockout(el, seconds) {
+  if (!el) return;
+  el.textContent = `Too many attempts. Try again in ${seconds}s.`;
+  el.style.display = 'block';
+  el.style.color = 'rgba(251,191,36,0.9)';
+  const interval = setInterval(() => {
+    seconds--;
+    if (seconds <= 0) {
+      clearInterval(interval);
+      el.style.display = 'none';
+      el.style.color = '';
+      const input = document.getElementById('tab-lock-password');
+      if (input) { input.disabled = false; input.focus(); }
+      const btn = document.getElementById('tab-lock-unlock-btn');
+      if (btn) { btn.disabled = false; }
+    } else {
+      el.textContent = `Too many attempts. Try again in ${seconds}s.`;
+    }
+  }, 1000);
 }
 
 // --- Hide overlay ---

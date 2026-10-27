@@ -4,6 +4,10 @@
 
 const STORAGE_KEY = 'tabLock_passwords';
 const LOCKED_TABS_KEY = 'tabLock_lockedTabs';
+const ATTEMPTS_KEY = 'tabLock_attempts'; // { [domain]: { count, lockUntil, lockDuration } }
+const MAX_ATTEMPTS = 5;
+const INITIAL_LOCK_MS = 30_000;
+const MAX_LOCK_MS = 300_000;
 
 // --- Initialize default data ---
 chrome.runtime.onInstalled.addListener(async () => {
@@ -17,7 +21,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   }
 });
 
-// --- Get the domain from a URL ---
+// --- Get domain from URL ---
 function getDomain(url) {
   try {
     return new URL(url).hostname;
@@ -42,6 +46,40 @@ async function isDomainSessionLocked(domain) {
   // If the domain is not in the map, it's locked by default (undefined !== false)
   return lockedTabs[domain] !== false;
 }
+
+// --- Rate limiting helpers ---
+async function getAttempts(domain) {
+  const data = await chrome.storage.local.get(ATTEMPTS_KEY);
+  const attempts = data[ATTEMPTS_KEY] || {};
+  return attempts[domain] || null;
+}
+async function setAttempts(domain, val) {
+  const data = await chrome.storage.local.get(ATTEMPTS_KEY);
+  const attempts = data[ATTEMPTS_KEY] || {};
+  if (val === null) {
+    delete attempts[domain];
+  } else {
+    attempts[domain] = val;
+  }
+  await chrome.storage.local.set({ [ATTEMPTS_KEY]: attempts });
+}
+async function isDomainRateLocked(domain) {
+  const a = await getAttempts(domain);
+  if (!a || !a.lockUntil) return null; // no lock active
+  if (Date.now() < a.lockUntil) return a;
+  return null; // lock expired
+}
+async function recordWrongAttempt(domain) {
+  const a = await getAttempts(domain);
+  const count = (a?.count || 0) + 1;
+  if (count >= MAX_ATTEMPTS) {
+    const lockDuration = Math.min(a?.lockDuration || INITIAL_LOCK_MS, MAX_LOCK_MS) * 2;
+    await setAttempts(domain, { count: 0, lockUntil: Date.now() + lockDuration, lockDuration });
+  } else {
+    await setAttempts(domain, { count, lockUntil: a?.lockUntil, lockDuration: a?.lockDuration || INITIAL_LOCK_MS });
+  }
+}
+async function clearAttempts(domain) { await setAttempts(domain, null); }
 
 // --- Show the lock overlay via content script ---
 async function injectLockOverlay(tabId, domain) {
@@ -172,26 +210,36 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const data = await chrome.storage.local.get(STORAGE_KEY);
       const passwords = data[STORAGE_KEY] || {};
       const storedHash = passwords[domain];
-      
+
       if (!storedHash) {
         sendResponse({ valid: false, error: 'No password set for this domain' });
         return;
       }
-      
+
+      // Check rate lock
+      const lock = await isDomainRateLocked(domain);
+      if (lock) {
+        const retryAfter = Math.ceil((lock.lockUntil - Date.now()) / 1000);
+        sendResponse({ valid: false, error: 'locked', retryAfter, attemptsLeft: 0 });
+        return;
+      }
+
       const encoder = new TextEncoder();
       const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(password));
       const hashArray = Array.from(new Uint8Array(hashBuffer));
       const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-      
+
       const valid = hashHex === storedHash;
-      
+
       if (valid) {
+        await clearAttempts(domain);
+
         // Mark this tab as unlocked for the session
         const lockedData = await chrome.storage.local.get(LOCKED_TABS_KEY);
         const lockedTabs = lockedData[LOCKED_TABS_KEY] || {};
         lockedTabs[domain] = false; // false = unlocked
         await chrome.storage.local.set({ [LOCKED_TABS_KEY]: lockedTabs });
-        
+
         // Tell the tab to unlock
         if (sender.tab && sender.tab.id) {
           try {
@@ -200,9 +248,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             // Tab might have been closed
           }
         }
+        sendResponse({ valid });
+      } else {
+        const a = await getAttempts(domain);
+        const count = (a?.count || 0) + 1;
+        const remaining = Math.max(0, MAX_ATTEMPTS - count);
+        await recordWrongAttempt(domain);
+        sendResponse({ valid: false, attemptsLeft: remaining, error: 'Incorrect password' });
       }
-      
-      sendResponse({ valid });
     },
     
     // Popup: unlock a specific tab temporarily
