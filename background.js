@@ -78,7 +78,9 @@ async function recordWrongAttempt(domain) {
   const a = await getAttempts(domain);
   const count = (a?.count || 0) + 1;
   if (count >= MAX_ATTEMPTS) {
-    const lockDuration = Math.min(a?.lockDuration || INITIAL_LOCK_MS, MAX_LOCK_MS) * 2;
+    // First lockout is 30s, doubling each time, capped at 5 minutes.
+    const prev = a?.lockDuration ? a.lockDuration : INITIAL_LOCK_MS / 2;
+    const lockDuration = Math.min(prev * 2, MAX_LOCK_MS);
     await setAttempts(domain, { count: 0, lockUntil: Date.now() + lockDuration, lockDuration });
   } else {
     await setAttempts(domain, { count, lockUntil: a?.lockUntil, lockDuration: a?.lockDuration || INITIAL_LOCK_MS });
