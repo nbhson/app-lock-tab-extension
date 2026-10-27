@@ -9,6 +9,11 @@ const MAX_ATTEMPTS = 5;
 const INITIAL_LOCK_MS = 30_000;
 const MAX_LOCK_MS = 300_000;
 
+// In-memory tracking for overlay injection attempts per tab.
+// Max 3 injection attempts per tab before giving up.
+const _tabInjectionAttempts = new Map(); // tabId → { attempts, retryTimer }
+const MAX_INJECTION_ATTEMPTS = 3;
+
 // --- Initialize default data ---
 chrome.runtime.onInstalled.addListener(async () => {
   const data = await chrome.storage.local.get(STORAGE_KEY);
@@ -81,27 +86,41 @@ async function recordWrongAttempt(domain) {
 }
 async function clearAttempts(domain) { await setAttempts(domain, null); }
 
-// --- Show the lock overlay via content script ---
+// --- Show the lock overlay via content script (with capped retries) ---
 async function injectLockOverlay(tabId, domain) {
+  const entry = _tabInjectionAttempts.get(tabId) || { attempts: 0, retryTimer: null };
+  if (entry.attempts >= MAX_INJECTION_ATTEMPTS) return;
+  entry.attempts++;
+  _tabInjectionAttempts.set(tabId, entry);
+
   try {
     await chrome.tabs.sendMessage(tabId, {
       type: 'SHOW_LOCK',
       domain: domain
     });
   } catch (e) {
-    // Content script may not be ready yet; retry after a short delay
-    setTimeout(async () => {
-      try {
-        await chrome.tabs.sendMessage(tabId, {
-          type: 'SHOW_LOCK',
-          domain: domain
-        });
-      } catch (err) {
-        console.error('Tab Lock: Could not inject lock overlay:', err);
-      }
-    }, 300);
+    // Content script may not be ready yet; retry once after a short delay
+    if (entry.attempts < MAX_INJECTION_ATTEMPTS && !entry.retryTimer) {
+      entry.retryTimer = setTimeout(async () => {
+        entry.retryTimer = null;
+        _tabInjectionAttempts.set(tabId, entry);
+        try {
+          await chrome.tabs.sendMessage(tabId, {
+            type: 'SHOW_LOCK',
+            domain: domain
+          });
+        } catch (err) {
+          console.error('Tab Lock: Could not inject lock overlay:', err);
+        }
+      }, 300);
+    } else {
+      console.error('Tab Lock: Could not inject lock overlay:', e);
+    }
   }
 }
+
+// Clear injection tracking when tab closes
+chrome.tabs.onRemoved.addListener(tabId => _tabInjectionAttempts.delete(tabId));
 
 // --- On navigation complete, check if tab should be locked ---
 chrome.webNavigation.onCompleted.addListener(async (details) => {
