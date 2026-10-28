@@ -200,7 +200,8 @@ async function attemptUnlock(input, errorEl, attemptsEl) {
   try {
     const response = await chrome.runtime.sendMessage({
       type: 'VERIFY_PASSWORD',
-      domain: domain,
+      domain: currentDomain, // TRƯỚC ĐÂY là `domain` — biến không tồn tại →
+                             // ReferenceError, unlock KHÔNG BAO GIỜ hoạt động
       password: password
     });
 
@@ -277,8 +278,13 @@ function hideLockOverlay() {
 }
 
 // --- Simple HTML escape ---
+// Đủ 5 entities: bản textContent-trick không escape quotes — nếu dữ liệu
+// được nội suy vào attribute sẽ breakout được.
 function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }

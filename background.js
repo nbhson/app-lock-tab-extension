@@ -14,6 +14,56 @@ const MAX_LOCK_MS = 300_000;
 const _tabInjectionAttempts = new Map(); // tabId → { attempts, retryTimer }
 const MAX_INJECTION_ATTEMPTS = 3;
 
+// --- Password hashing ---
+// PBKDF2-SHA256 + salt ngẫu nhiên per-domain (trước đây là SHA-256 trần:
+// không salt, hash nhanh → rainbow-table/brute-force offline khi storage
+// bị đọc; SHA-256 trần của password yếu bị bẻ trong giây lát).
+const PBKDF2_ITERATIONS = 150_000;
+
+function toHex(buffer) {
+  return Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function deriveHash(password, saltHex) {
+  const enc = new TextEncoder();
+  const salt = saltHex ? hexToBytes(saltHex) : crypto.getRandomValues(new Uint8Array(16));
+  const key = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+    key,
+    256
+  );
+  return { hash: toHex(bits), salt: toHex(salt) };
+}
+
+function hexToBytes(hex) {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return out;
+}
+
+// Verify: hỗ trợ cả bản ghi cũ (plain sha256 hex, không salt — migrate khi
+// user set lại password) lẫn bản mới (salt:hash).
+async function verifyPassword(password, stored) {
+  if (!stored) return false;
+  if (stored.includes(':')) {
+    const [saltHex, hashHex] = stored.split(':');
+    const { hash } = await deriveHash(password, saltHex);
+    return timingSafeEqual(hash, hashHex);
+  }
+  // Legacy format: SHA-256 trần
+  const enc = new TextEncoder();
+  const legacy = await crypto.subtle.digest('SHA-256', enc.encode(password));
+  return toHex(legacy) === stored;
+}
+
+function timingSafeEqual(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
 // --- Initialize default data ---
 chrome.runtime.onInstalled.addListener(async () => {
   const data = await chrome.storage.local.get(STORAGE_KEY);
@@ -177,12 +227,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const passwords = data[STORAGE_KEY] || {};
       
       if (password) {
-        // Hash the password
-        const encoder = new TextEncoder();
-        const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(password));
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-        passwords[domain] = hashHex;
+        // Hash the password (PBKDF2 + per-domain salt)
+        const { hash, salt } = await deriveHash(password);
+        passwords[domain] = `${salt}:${hash}`;
         
         // Lock the session for this domain immediately
         const lockedData = await chrome.storage.local.get(LOCKED_TABS_KEY);
@@ -245,12 +292,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
 
-      const encoder = new TextEncoder();
-      const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(password));
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-
-      const valid = hashHex === storedHash;
+      const valid = await verifyPassword(password, storedHash);
 
       if (valid) {
         await clearAttempts(domain);
