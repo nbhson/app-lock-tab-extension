@@ -75,6 +75,9 @@
         </div>
         <div class="actions">
           <button class="btn btn-success" id="btn-unlock">🔓 Unlock for this session</button>
+          <div class="actions-row" id="lock-now-row">
+            <button class="btn btn-secondary" id="btn-lock-now" title="Khóa lại domain ngay lập tức">🔒 Lock now</button>
+          </div>
           <button class="btn btn-danger" id="btn-remove-password">🗑️ Remove password</button>
         </div>
       </div>
@@ -104,6 +107,21 @@
           </div>
         </div>
         <button class="btn btn-secondary" id="btn-change-password">🔄 Update Password</button>
+      </div>
+      <!-- Auto re-lock -->
+      <div id="section-autolock" class="form-card">
+        <h3><span class="icon">⏱️</span> Auto re-lock</h3>
+        <p class="desc">Tự động khóa lại domain sau khoảng thời gian không hoạt động kể từ lần mở khóa gần nhất.</p>
+        <div class="form-group">
+          <label for="autolock-select">Khóa lại sau</label>
+          <select id="autolock-select" class="select">
+            <option value="0">Tắt (mặc định)</option>
+            <option value="900000">15 phút</option>
+            <option value="3600000">1 giờ</option>
+            <option value="14400000">4 giờ</option>
+            <option value="86400000">24 giờ</option>
+          </select>
+        </div>
       </div>
     </div>
 

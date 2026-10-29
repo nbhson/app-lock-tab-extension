@@ -79,6 +79,17 @@ body {
 }
 .input-wrap input:focus { border-color: rgba(239,68,68,0.4); background: rgba(255,255,255,0.06); box-shadow: 0 0 0 3px rgba(239,68,68,0.12); }
 .input-wrap input::placeholder { color: rgba(255,255,255,0.25); }
+.input-wrap input:focus-visible { outline: none; }
+.select {
+  width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 9px 12px; color: var(--text); font-size: 13px; font-family: inherit; cursor: pointer; outline: none;
+  transition: all 0.2s var(--ease); appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-2) 50%), linear-gradient(135deg, var(--text-2) 50%, transparent 50%);
+  background-position: calc(100% - 16px) 55%, calc(100% - 11px) 13px;
+  background-size: 5px 5px; background-repeat: no-repeat;
+}
+.select:focus-visible { border-color: rgba(239,68,68,0.4); box-shadow: 0 0 0 3px rgba(239,68,68,0.12); }
+.select option { background: var(--card); color: var(--text); }
 .toggle-visibility {
   position: absolute; right: 6px; width: 28px; height: 28px; display: grid; place-items: center;
   background: transparent; border: none; color: var(--text-3); cursor: pointer; border-radius: 6px; font-size: 14px; transition: all 0.2s;
@@ -108,6 +119,8 @@ body {
 .btn-success:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(34,197,94,0.30); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
 .actions { display: flex; flex-direction: column; gap: 8px; }
+.actions-row { display: flex; gap: 8px; }
+.actions-row .btn { flex: 1; width: auto; }
 .divider { height: 1px; background: var(--border); margin: 2px 0; }
 
 .hidden { display: none !important; }
