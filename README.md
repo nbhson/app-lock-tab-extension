@@ -6,9 +6,11 @@ A Chrome extension that lets you lock browser tabs with password protection per 
 
 - **🔐 Lock by domain**: Set a password for any website domain
 - **🔓 Session-based unlocking**: Once you enter the correct password, the domain stays unlocked until you close the tab/browser
+- **⏱️ Auto re-lock**: Optionally re-lock a domain automatically 15m/1h/4h/24h after the last unlock
+- **🔒 Lock now**: Re-lock a domain immediately from the popup
 - **⚙️ Settings page**: View and manage all locked domains
 - **🔄 Change password**: Update your password anytime
-- **🛡️ Secure storage**: Passwords are hashed with SHA-256 before storage
+- **🛡️ Secure storage**: Passwords are hashed with PBKDF2-SHA256 (150k iterations, per-domain salt) before storage
 
 ## How to Use
 
@@ -49,6 +51,6 @@ A Chrome extension that lets you lock browser tabs with password protection per 
 
 ## Security Notes
 
-- Passwords are hashed using the Web Crypto API (SHA-256)
+- Passwords are hashed with PBKDF2-SHA256 (150,000 iterations, per-domain random salt) via the Web Crypto API
 - No passwords are sent over the network — everything stays local
-- Session unlock state persists only for the current browser session
+- Session unlock state persists only for the current browser session (stored in `chrome.storage.session` where available)
