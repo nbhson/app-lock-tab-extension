@@ -5,9 +5,12 @@
 const STORAGE_KEY = 'tabLock_passwords';
 const LOCKED_TABS_KEY = 'tabLock_lockedTabs';
 const ATTEMPTS_KEY = 'tabLock_attempts'; // { [domain]: { count, lockUntil, lockDuration } }
+const SETTINGS_KEY = 'tabLock_settings'; // { autoLockMs }
+const UNLOCKED_KEY = 'tabLock_unlockedAt'; // { [domain]: unlockedAt } — session-scope nếu khả dụng
 const MAX_ATTEMPTS = 5;
 const INITIAL_LOCK_MS = 30_000;
 const MAX_LOCK_MS = 300_000;
+const AUTOLOCK_CHOICES = [0, 15 * 60_000, 60 * 60_000, 4 * 3_600_000, 24 * 60 * 60_000];
 
 // In-memory tracking for overlay injection attempts per tab.
 // Max 3 injection attempts per tab before giving up.
@@ -93,13 +96,46 @@ async function isDomainLocked(domain) {
   return !!passwords[domain];
 }
 
+// --- Session-scope storage helper: storage.session tự xóa khi browser
+// đóng (enterprise: unlock không sống qua restart). Fallback storage.local.
+function sessionStore() {
+  return chrome.storage.session || chrome.storage.local;
+}
+
+// --- Auto-lock setting ---
+async function getAutoLockMs() {
+  try {
+    const data = await chrome.storage.local.get(SETTINGS_KEY);
+    const ms = data[SETTINGS_KEY]?.autoLockMs;
+    return AUTOLOCK_CHOICES.includes(ms) ? ms : 0;
+  } catch {
+    return 0;
+  }
+}
+
 // --- Check if a domain is currently locked (session) ---
-// If no session state exists for the domain, it's considered locked by default
+// Precedence:
+//   1. lockedTabs[domain] === true  → bị khóa thủ công (Lock now)
+//   2. không có entry               → mặc định khóa
+//   3. lockedTabs[domain] === false → unlocked; nếu auto-lock bật thì kiểm
+//     tra unlockedAt có quá hạn chưa. Entry legacy (không timestamp) giữ
+//     nguyên hành vi cũ (unlocked) — timestamp được ghi ở lần unlock sau.
 async function isDomainSessionLocked(domain) {
   const data = await chrome.storage.local.get(LOCKED_TABS_KEY);
   const lockedTabs = data[LOCKED_TABS_KEY] || {};
-  // If the domain is not in the map, it's locked by default (undefined !== false)
-  return lockedTabs[domain] !== false;
+  if (lockedTabs[domain] !== false) return true; // not unlocked
+
+  const autoLockMs = await getAutoLockMs();
+  if (!autoLockMs) return false;
+
+  try {
+    const unlocked = await sessionStore().get(UNLOCKED_KEY);
+    const unlockedAt = (unlocked[UNLOCKED_KEY] || {})[domain];
+    if (!unlockedAt) return false; // legacy unlock — chưa có timestamp
+    return Date.now() - unlockedAt >= autoLockMs; // hết hạn = locked lại
+  } catch {
+    return false; // không đọc được session state → giữ unlocked (không khóa oan)
+  }
 }
 
 // --- Rate limiting helpers ---
@@ -208,6 +244,33 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   }
 });
 
+// --- Auto re-lock scheduling (chrome.alarms) ---
+// Khi auto-lock bật và unlock thành công, đặt alarm 1-lần tại thời điểm hết hạn.
+// Khi alarm nổ: nếu domain giờ đã "locked" theo isDomainSessionLocked → đổ
+// overlay vào các tab đang mở của domain đó.
+const RELOCK_ALARM_PREFIX = 'tabLock-relock:';
+
+async function scheduleRelockAlarm(domain, autoLockMs) {
+  if (!autoLockMs) return;
+  try {
+    chrome.alarms.create(RELOCK_ALARM_PREFIX + domain, { when: Date.now() + autoLockMs });
+  } catch (e) { /* alarms API không khả dụng — bỏ qua, vẫn còn kiểm tra tại navigation */ }
+}
+
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (!alarm.name || !alarm.name.startsWith(RELOCK_ALARM_PREFIX)) return;
+  const domain = alarm.name.slice(RELOCK_ALARM_PREFIX.length);
+  if (!(await isDomainLocked(domain))) return;
+  const sessionLocked = await isDomainSessionLocked(domain);
+  if (!sessionLocked) return;
+  const tabs = await chrome.tabs.query({});
+  for (const tab of tabs) {
+    if (tab.url && getDomain(tab.url) === domain) {
+      try { await injectLockOverlay(tab.id, domain); } catch (e) { /* tab inaccessible */ }
+    }
+  }
+});
+
 // --- Listen for messages from content script / popup ---
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const handler = {
@@ -217,7 +280,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const locked = await isDomainLocked(domain);
       const data = await chrome.storage.local.get(STORAGE_KEY);
       const passwords = data[STORAGE_KEY] || {};
-      sendResponse({ locked, hasPassword: !!passwords[domain] });
+      const sessionLocked = await isDomainSessionLocked(domain);
+      const autoLockMs = await getAutoLockMs();
+      let unlockedAt = null;
+      try {
+        const u = await sessionStore().get(UNLOCKED_KEY);
+        unlockedAt = (u[UNLOCKED_KEY] || {})[domain] || null;
+      } catch (e) { /* ignore */ }
+      sendResponse({ locked, hasPassword: !!passwords[domain], sessionLocked, autoLockMs, unlockedAt });
+    },
+
+    // Popup / options: auto re-lock setting
+    async 'GET_AUTOLOCK'() {
+      sendResponse({ autoLockMs: await getAutoLockMs(), choices: AUTOLOCK_CHOICES });
+    },
+    async 'SET_AUTOLOCK'() {
+      const ms = Number(message.autoLockMs) || 0;
+      if (!AUTOLOCK_CHOICES.includes(ms)) {
+        sendResponse({ success: false, error: 'Invalid auto-lock value' });
+        return;
+      }
+      await chrome.storage.local.set({ [SETTINGS_KEY]: { autoLockMs: ms } });
+      sendResponse({ success: true, autoLockMs: ms });
     },
     
     // Popup: set password for domain
@@ -253,11 +337,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
       } else {
         delete passwords[domain];
-        // Also clear session lock for this domain
+        // Also clear session lock + auto-lock timestamp for this domain
         const lockedData = await chrome.storage.local.get(LOCKED_TABS_KEY);
         const lockedTabs = lockedData[LOCKED_TABS_KEY] || {};
         delete lockedTabs[domain];
         await chrome.storage.local.set({ [LOCKED_TABS_KEY]: lockedTabs });
+        try {
+          const unlockedData = await sessionStore().get(UNLOCKED_KEY);
+          const map = unlockedData[UNLOCKED_KEY] || {};
+          delete map[domain];
+          await sessionStore().set({ [UNLOCKED_KEY]: map });
+        } catch (e) { /* ignore */ }
       }
       
       await chrome.storage.local.set({ [STORAGE_KEY]: passwords });
@@ -297,11 +387,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (valid) {
         await clearAttempts(domain);
 
-        // Mark this tab as unlocked for the session
+        // Mark this tab as unlocked for the session.
+        // unlockedAt (session-scope) drives auto re-lock timer.
         const lockedData = await chrome.storage.local.get(LOCKED_TABS_KEY);
         const lockedTabs = lockedData[LOCKED_TABS_KEY] || {};
         lockedTabs[domain] = false; // false = unlocked
         await chrome.storage.local.set({ [LOCKED_TABS_KEY]: lockedTabs });
+        try {
+          const unlockedData = await sessionStore().get(UNLOCKED_KEY);
+          const map = unlockedData[UNLOCKED_KEY] || {};
+          map[domain] = Date.now();
+          await sessionStore().set({ [UNLOCKED_KEY]: map });
+        } catch (e) { /* fallback đã xử lý trong sessionStore() */ }
+        await scheduleRelockAlarm(domain, await getAutoLockMs());
 
         // Tell the tab to unlock
         if (sender.tab && sender.tab.id) {
@@ -321,23 +419,44 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
     },
     
-    // Popup: unlock a specific tab temporarily
+    // Popup: unlock a specific tab temporarily (records unlockedAt for auto re-lock)
     async 'UNLOCK_DOMAIN'() {
       const { domain } = message;
       const lockedData = await chrome.storage.local.get(LOCKED_TABS_KEY);
       const lockedTabs = lockedData[LOCKED_TABS_KEY] || {};
       lockedTabs[domain] = false;
       await chrome.storage.local.set({ [LOCKED_TABS_KEY]: lockedTabs });
+      try {
+        const unlockedData = await sessionStore().get(UNLOCKED_KEY);
+        const map = unlockedData[UNLOCKED_KEY] || {};
+        map[domain] = Date.now();
+        await sessionStore().set({ [UNLOCKED_KEY]: map });
+      } catch (e) { /* ignore */ }
+      await scheduleRelockAlarm(domain, await getAutoLockMs());
       sendResponse({ success: true });
     },
-    
-    // Popup: re-lock a domain
+
+    // Popup: re-lock a domain immediately ("Lock now")
     async 'LOCK_DOMAIN'() {
       const { domain } = message;
       const lockedData = await chrome.storage.local.get(LOCKED_TABS_KEY);
       const lockedTabs = lockedData[LOCKED_TABS_KEY] || {};
       lockedTabs[domain] = true;
       await chrome.storage.local.set({ [LOCKED_TABS_KEY]: lockedTabs });
+      // Xóa unlockedAt (nếu có) để auto-lock timer bắt đầu lại từ trạng thái khóa
+      try {
+        const unlockedData = await sessionStore().get(UNLOCKED_KEY);
+        const map = unlockedData[UNLOCKED_KEY] || {};
+        delete map[domain];
+        await sessionStore().set({ [UNLOCKED_KEY]: map });
+      } catch (e) { /* ignore */ }
+      // Đổ overlay ngay vào các tab đang mở của domain — Lock now phải có tác dụng tức thì
+      const tabs = await chrome.tabs.query({});
+      for (const tab of tabs) {
+        if (tab.url && getDomain(tab.url) === domain) {
+          try { await injectLockOverlay(tab.id, domain); } catch (e) { /* tab inaccessible */ }
+        }
+      }
       sendResponse({ success: true });
     },
     
@@ -351,7 +470,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   
   const action = handler[message.type];
   if (action) {
-    action();
+    // Error boundary: handler throw → vẫn sendResponse để caller không treo
+    Promise.resolve().then(action).catch((e) => {
+      console.error('Tab Lock handler error:', e);
+      try {
+        sendResponse({ success: false, error: String((e && e.message) || e) });
+      } catch (_) { /* channel already closed */ }
+    });
     return true; // Keep message channel open for async response
   }
 });
