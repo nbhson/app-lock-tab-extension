@@ -4,6 +4,20 @@
 
 let lockOverlay = null;
 let currentDomain = null;
+// Timer/interval tracking — phải clear khi overlay bị remove giữa chừng,
+// nếu không interval chạy tiếp trên DOM node đã detach (leak + flicker).
+let lockTimers = [];
+
+function trackTimer(id, isInterval) {
+  lockTimers.push({ id, isInterval });
+  return id;
+}
+function clearLockTimers() {
+  for (const t of lockTimers) {
+    if (t.isInterval) clearInterval(t.id); else clearTimeout(t.id);
+  }
+  lockTimers = [];
+}
 
 // --- Listen for messages from background ---
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -22,6 +36,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // --- Remove any existing lock overlay when page unloads ---
 window.addEventListener('beforeunload', () => {
+  clearLockTimers();
   hideLockOverlay();
 });
 
@@ -166,7 +181,7 @@ function showLockOverlay(domain) {
 
   if (input) {
     // Auto-focus after a short delay
-    setTimeout(() => input.focus(), 100);
+    trackTimer(setTimeout(() => input.focus(), 100), false);
 
     // Submit on Enter
     input.addEventListener('keydown', async (e) => {
@@ -237,7 +252,10 @@ function showError(el, message, duration) {
   if (el) {
     el.textContent = message;
     el.style.display = 'block';
-    setTimeout(() => { el.style.display = 'none'; }, duration || 3000);
+    // Clear error timer trước đó (nếu có) — tránh error mới bị timeout cũ
+    // ẩn đi ngay lập tức.
+    if (el._hideTimer) clearTimeout(el._hideTimer);
+    el._hideTimer = trackTimer(setTimeout(() => { el.style.display = 'none'; el._hideTimer = null; }, duration || 3000), false);
   }
 }
 
@@ -253,7 +271,8 @@ function showLockout(el, seconds) {
   el.textContent = `Too many attempts. Try again in ${seconds}s.`;
   el.style.display = 'block';
   el.style.color = 'rgba(251,191,36,0.9)';
-  const interval = setInterval(() => {
+  if (el._interval) clearInterval(el._interval); // safety
+  const interval = trackTimer(setInterval(() => {
     seconds--;
     if (seconds <= 0) {
       clearInterval(interval);
@@ -266,11 +285,13 @@ function showLockout(el, seconds) {
     } else {
       el.textContent = `Too many attempts. Try again in ${seconds}s.`;
     }
-  }, 1000);
+  }, 1000), true);
+  el._interval = interval;
 }
 
 // --- Hide overlay ---
 function hideLockOverlay() {
+  clearLockTimers();
   if (lockOverlay) {
     lockOverlay.remove();
     lockOverlay = null;
