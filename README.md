@@ -1,5 +1,7 @@
 # Tab Lock 🔒
 
+[![CI](https://github.com/nbhson/app-lock-tab-extension/actions/workflows/ci.yml/badge.svg)](https://github.com/nbhson/app-lock-tab-extension/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A Chrome extension that lets you lock browser tabs with password protection per domain.
 
 ## Features
