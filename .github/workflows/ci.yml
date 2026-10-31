@@ -1,0 +1,22 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  syntax-check:
+    name: JS syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check all JS files parse
+        run: |
+          count=0
+          while IFS= read -r -d "" f; do
+            node --check "$f" || exit 1
+            count=$((count+1))
+          done < <(find . -name "*.js" -not -path "./node_modules/*" -not -path "./.git/*" -print0)
+          echo "OK: $count JS file(s) passed syntax check"
+
