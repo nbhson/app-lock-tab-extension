@@ -1,6 +1,15 @@
 // ====================================================
 // Tab Lock - Content Script
 // ====================================================
+// Không còn auto-inject qua manifest (đã bỏ content_scripts + <all_urls>).
+// File này được background inject ON-DEMAND bằng chrome.scripting.executeScript
+// ngay trước khi cần đổ overlay. executeScript có thể chạy lại file trên cùng
+// một trang → guard chống double-injection: nếu instance đầu tiên vẫn đang chạy
+// (đang lắng nghe SHOW_LOCK/UNLOCK), thoát im lặng thay vì redeclare biến
+// top-level (sẽ văng SyntaxError "already been declared").
+(() => {
+if (window.__tabLockInjected) return;
+window.__tabLockInjected = true;
 
 let lockOverlay = null;
 let currentDomain = null;
@@ -309,3 +318,4 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+})();

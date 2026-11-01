@@ -174,7 +174,30 @@ async function recordWrongAttempt(domain) {
 }
 async function clearAttempts(domain) { await setAttempts(domain, null); }
 
-// --- Show the lock overlay via content script (with capped retries) ---
+// --- Show the lock overlay (inject on-demand + capped retries) ---
+// Content script không còn auto-inject qua manifest. Trình tự:
+//   1. Thử sendMessage SHOW_LOCK — nếu content script đã có trong tab là đủ.
+//   2. Nếu chưa có → chrome.scripting.executeScript(['content.js']) rồi gửi lại.
+// executeScript cần host permission cho origin của tab (được cấp per-domain
+// qua chrome.permissions.request từ popup/options khi người dùng bật khóa)
+// hoặc grant activeTab còn hiệu lực. Lỗi tạm thời (tab đang load) được retry,
+// giới hạn MAX_INJECTION_ATTEMPTS lần như trước.
+async function showLockInTab(tabId, domain) {
+  try {
+    await chrome.tabs.sendMessage(tabId, {
+      type: 'SHOW_LOCK',
+      domain: domain
+    });
+  } catch (e) {
+    // Content script chưa có trong tab → inject on-demand rồi gửi lại
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+    await chrome.tabs.sendMessage(tabId, {
+      type: 'SHOW_LOCK',
+      domain: domain
+    });
+  }
+}
+
 async function injectLockOverlay(tabId, domain) {
   const entry = _tabInjectionAttempts.get(tabId) || { attempts: 0, retryTimer: null };
   if (entry.attempts >= MAX_INJECTION_ATTEMPTS) return;
@@ -182,21 +205,16 @@ async function injectLockOverlay(tabId, domain) {
   _tabInjectionAttempts.set(tabId, entry);
 
   try {
-    await chrome.tabs.sendMessage(tabId, {
-      type: 'SHOW_LOCK',
-      domain: domain
-    });
+    await showLockInTab(tabId, domain);
   } catch (e) {
-    // Content script may not be ready yet; retry once after a short delay
+    // Tab có thể chưa commit trang, hoặc chưa được cấp host permission
+    // (banner xin quyền hiển thị ở popup). Retry sau một khoảng ngắn.
     if (entry.attempts < MAX_INJECTION_ATTEMPTS && !entry.retryTimer) {
       entry.retryTimer = setTimeout(async () => {
         entry.retryTimer = null;
         _tabInjectionAttempts.set(tabId, entry);
         try {
-          await chrome.tabs.sendMessage(tabId, {
-            type: 'SHOW_LOCK',
-            domain: domain
-          });
+          await showLockInTab(tabId, domain);
         } catch (err) {
           console.error('Tab Lock: Could not inject lock overlay:', err);
         }

@@ -27,6 +27,40 @@ async function sendMsg(message) {
   }
 }
 
+// --- Host permissions (inject on-demand) ---
+// Manifest không còn <all_urls> — content script được inject on-demand bằng
+// chrome.scripting.executeScript, vốn cần host permission cho origin của tab.
+// Permission được xin per-domain (`*://domain/*`) từ popup/options với user
+// gesture, và được giữ vĩnh viễn cho đến khi user gỡ bỏ (đảm bảo overlay
+// đổ lại sau khi reload tab).
+function originPattern(domain) {
+  return `*://${domain}/*`;
+}
+
+async function hasHostPermission(domain) {
+  try {
+    return await chrome.permissions.contains({ origins: [originPattern(domain)] });
+  } catch {
+    return false;
+  }
+}
+
+// Phải được gọi từ click handler (user gesture). Trả về true nếu đã có hoặc
+// người dùng vừa cấp; false nếu bị từ chối.
+async function ensureHostPermission(domain) {
+  if (await hasHostPermission(domain)) return true;
+  try {
+    return await chrome.permissions.request({ origins: [originPattern(domain)] });
+  } catch {
+    return false;
+  }
+}
+
+function showPermBanner(show) {
+  const el = document.getElementById('perm-banner');
+  if (el) el.classList.toggle('hidden', !show);
+}
+
 async function withButton(btn, busyText, fn) {
   const orig = btn.textContent;
   btn.disabled = true;
@@ -123,6 +157,20 @@ function setupUXEnhancements() {
   document.getElementById('btn-lock-now').addEventListener('click', handleLockNow);
   document.getElementById('open-options').addEventListener('click', e => { e.preventDefault(); chrome.runtime.openOptionsPage(); });
 
+  // Host permission banner (domain đã có password nhưng chưa cấp quyền truy cập —
+  // ví dụ lock đặt trước khi extension chuyển sang inject on-demand)
+  const grantBtn = document.getElementById('btn-grant-perm');
+  if (grantBtn) {
+    grantBtn.addEventListener('click', async () => {
+      if (await ensureHostPermission(currentDomain)) {
+        showPermBanner(false);
+        showMessage('Đã cấp quyền truy cập site này', 'success');
+      } else {
+        showMessage('Chưa cấp quyền — màn hình khóa sẽ không hiện trên site này', 'error');
+      }
+    });
+  }
+
   // Auto re-lock selector
   const select = document.getElementById('autolock-select');
   if (select) {
@@ -153,6 +201,11 @@ async function handleSetPassword() {
   if (!newPass) return showMessage('Vui lòng nhập mật khẩu', 'error');
   if (newPass.length < 4) return showMessage('Mật khẩu phải ≥ 4 ký tự', 'error');
   if (newPass !== confirmPass) return showMessage('Mật khẩu không khớp', 'error');
+  // Xin host permission cho domain (user gesture: click) trước khi lưu —
+  // nếu không có quyền thì content script không inject được → khóa không hiển thị.
+  if (!(await ensureHostPermission(currentDomain))) {
+    return showMessage('Cần cấp quyền truy cập site này để hiển thị màn hình khóa. Thử lại và chọn "Allow".', 'error');
+  }
   const btn = document.getElementById('btn-set-password');
   await withButton(btn, 'Đang lưu...', async () => {
     try {
@@ -266,6 +319,11 @@ async function handleChange() {
 
 // "Lock now": khóa lại domain ngay lập tức (overlay đổ lại các tab đang mở)
 async function handleLockNow() {
+  // Đảm bảo có host permission (activeTab chỉ bao phủ tab đang mở popup;
+  // các tab khác cùng domain cần permission persist đã được cấp).
+  if (!(await ensureHostPermission(currentDomain))) {
+    return showMessage('Cần cấp quyền truy cập site này để khóa. Thử lại và chọn "Allow".', 'error');
+  }
   const btn = document.getElementById('btn-lock-now');
   await withButton(btn, 'Đang khóa...', async () => {
     try {
@@ -307,6 +365,14 @@ async function refreshStatus() {
     dot.className = 'status-dot no-password';
     text.textContent = 'Không đọc được trạng thái';
     return;
+  }
+
+  // Domain đã có password nhưng chưa được cấp host permission → overlay
+  // không thể inject (migrated từ bản <all_urls> hoặc user từng từ chối).
+  if (response.hasPassword) {
+    showPermBanner(!(await hasHostPermission(currentDomain)));
+  } else {
+    showPermBanner(false);
   }
 
   if (response.hasPassword) {

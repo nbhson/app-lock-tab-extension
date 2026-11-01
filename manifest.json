@@ -1,27 +1,22 @@
 {
   "manifest_version": 3,
   "name": "Tab Lock",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Lock browser tabs with password protection per domain",
   "permissions": [
     "storage",
     "tabs",
     "webNavigation",
-    "alarms"
+    "alarms",
+    "scripting",
+    "activeTab"
   ],
-  "host_permissions": [
-    "<all_urls>"
+  "optional_host_permissions": [
+    "*://*/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "run_at": "document_start"
-    }
-  ],
   "action": {
     "default_popup": "popup.html",
     "default_title": "Tab Lock",

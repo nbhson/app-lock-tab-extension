@@ -58,3 +58,41 @@
 - Background: handler dispatch bọc error boundary (handler throw vẫn sendResponse, caller không treo); LOCK_DOMAIN giờ inject overlay vào các tab đang mở (Lock now có tác dụng tức thì); auto re-lock dùng chrome.alarms 1-lần (permission `alarms` thêm vào manifest) để khóa tab đang mở đúng hạn, không phụ thuộc navigation.
 - `node --check` pass: background.js, content.js, popup.js, options.js. Manifest JSON hợp lệ.
 - Rủi ro còn lại: `chrome.storage.session` không có trên Chrome cũ → fallback `storage.local` (unlock sống qua restart trên browser cũ) — chấp nhận được, đã comment trong code. Alarm-based re-lock min delay của Chrome có thể clamp ~30s với value ngắn (nhỏ nhất 15 phút nên không ảnh hưởng).
+
+---
+
+# Round 3 (2026-11-01) — Thu hẹp quyền: bỏ `<all_urls>`, inject on-demand
+
+## Phân tích
+
+Content script (`content.js`) KHÔNG cần chạy trên mọi trang: nó không tự làm gì
+khi được tải, chỉ lắng nghe message `SHOW_LOCK`/`UNLOCK` từ background để đổ/gỡ
+overlay. Vì vậy auto-inject qua `content_scripts` + `host_permissions: <all_urls>`
+là quyền dư thừa — có thể chuyển sang inject on-demand.
+
+## Thay đổi
+
+1. **manifest.json**: bỏ `host_permissions: ["<all_urls>"]` và `content_scripts`.
+   Thêm `scripting` + `activeTab` vào `permissions`; khai báo
+   `optional_host_permissions: ["*://*/*"]` để xin host per-domain khi user bật khóa.
+2. **background.js**: `injectLockOverlay` giờ thử `sendMessage` trước; nếu content
+   script chưa có trong tab → `chrome.scripting.executeScript(['content.js'])`
+   rồi gửi `SHOW_LOCK` lại. Giữ nguyên retry có trần (3 lần/tab).
+3. **content.js**: bọc trong IIFE + guard `__tabLockInjected` chống double-injection
+   (executeScript chạy lại file trên cùng isolated world sẽ redeclare biến top-level).
+4. **popup.js / options.js**: xin permission `*://domain/*` bằng
+   `chrome.permissions.request` trong click handler (user gesture) trước khi
+   SET_PASSWORD / LOCK_DOMAIN / add-domain. Permission persist → overlay vẫn đổ
+   lại sau reload tab (giữ hành vi re-lock sau reload). Popup hiển thị banner
+   "Cấp quyền" cho domain đã có password nhưng chưa được cấp host permission
+   (migration từ bản `<all_urls>` hoặc user từng từ chối).
+5. **tests/manifest.test.mjs**: thêm 4 test khóa posture mới (không còn
+   `<all_urls>`/`content_scripts`, đủ quyền tối thiểu, background inject
+   on-demand, content.js có guard).
+
+## Trạng thái (Round 3)
+
+- [x] Phân tích + thiết kế permission flow
+- [x] Implement manifest + background + content + popup + options
+- [x] README mục Permissions
+- [x] `node --check` (4 file) + `node --test` (8/8 pass)

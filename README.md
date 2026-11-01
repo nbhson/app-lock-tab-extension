@@ -45,11 +45,33 @@ A Chrome extension that lets you lock browser tabs with password protection per 
 | File | Purpose |
 |------|---------|
 | `manifest.json` | Extension configuration |
-| `background.js` | Service worker - handles messaging, storage, navigation events |
-| `content.js` | Injected into pages - shows/hides lock overlay |
+| `background.js` | Service worker - handles messaging, storage, navigation events, and injects the content script on demand |
+| `content.js` | Injected on demand into pages that need the lock screen - shows/hides lock overlay |
 | `popup.html` / `popup.js` | Extension popup UI |
 | `options.html` / `options.js` | Settings page for all domains |
 | `icons/` | Extension icons |
+
+## Permissions
+
+Tab Lock follows a least-privilege model: it does **not** have access to all
+sites by default.
+
+| Permission | Why it's needed |
+|------------|-----------------|
+| `storage` | Store password hashes (PBKDF2), lock state and settings locally |
+| `tabs` | Read tab URLs to match a tab to its locked domain |
+| `webNavigation` | Detect page loads to re-show the lock screen after a reload |
+| `alarms` | Schedule auto re-lock timers |
+| `scripting` | Inject the lock-screen content script into a tab on demand (`chrome.scripting.executeScript`) |
+| `activeTab` | Temporary access to the tab you invoked the extension on (e.g. clicking the popup) |
+
+**Host access** (`*://*/*`) is an *optional* permission: it is requested
+per-domain (`*://example.com/*`) when you lock that domain from the popup or
+settings page. Chrome shows a permission prompt the first time; the grant
+persists so the lock screen keeps reappearing after page reloads. If you
+decline, the domain is still saved but the lock screen cannot be displayed —
+the popup shows a banner with a "Cấp quyền" (Grant access) button so you can
+grant it later.
 
 ## Security Notes
 

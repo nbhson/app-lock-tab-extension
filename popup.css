@@ -125,6 +125,10 @@ body {
 
 .hidden { display: none !important; }
 
+.perm-banner { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: rgba(245,158,11,0.10); border: 1px solid rgba(245,158,11,0.25); border-radius: var(--radius-sm); padding: 8px 10px; margin-bottom: 10px; }
+.perm-banner-text { font-size: 11px; color: #fcd34d; line-height: 1.4; }
+.perm-banner .btn { flex-shrink: 0; padding: 6px 10px; font-size: 11px; }
+
 .footer { text-align: center; padding-top: 12px; border-top: 1px solid var(--border); }
 .footer a { color: var(--text-3); text-decoration: none; font-size: 12px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; transition: all 0.2s; }
 .footer a:hover { color: var(--text); background: rgba(255,255,255,0.06); }

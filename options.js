@@ -52,6 +52,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     const btn = document.getElementById('btn-add-domain');
     btn.disabled = true;
     try {
+      // Xin host permission trước khi lưu — không có quyền thì màn hình khóa
+      // không hiển thị được trên domain này.
+      if (!(await ensureHostPermission(cleanDomain))) {
+        showMessage('Permission denied — Chrome needs access to this domain to show the lock screen', 'error');
+        return;
+      }
       const res = await sendMessage({ type: 'SET_PASSWORD', domain: cleanDomain, password });
       if (res && res.success === false) throw new Error(res.error || 'Failed to set password');
       showMessage(`Domain "${cleanDomain}" locked successfully!`, 'success');
@@ -85,6 +91,32 @@ async function sendMessage(message) {
     return res;
   } catch (e) {
     throw new Error(e?.message || 'Could not reach the extension service worker');
+  }
+}
+
+// --- Host permission (inject on-demand) ---
+// Content script được inject bằng chrome.scripting.executeScript nên cần host
+// permission cho domain. Xin per-domain (`*://domain/*`) với user gesture
+// (click handler) — permission persist nên overlay vẫn đổ lại sau reload tab.
+function originPattern(domain) {
+  return `*://${domain}/*`;
+}
+
+async function hasHostPermission(domain) {
+  try {
+    return await chrome.permissions.contains({ origins: [originPattern(domain)] });
+  } catch {
+    return false;
+  }
+}
+
+// Trả về true nếu đã có hoặc người dùng vừa cấp; false nếu bị từ chối.
+async function ensureHostPermission(domain) {
+  if (await hasHostPermission(domain)) return true;
+  try {
+    return await chrome.permissions.request({ origins: [originPattern(domain)] });
+  } catch {
+    return false;
   }
 }
 
